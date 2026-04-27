@@ -1,11 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
-import os
 
 block_cipher = None
 
 a = Analysis(
-    ['src/claude_tracker.py'],
-    pathex=[],
+    ['src/design_a.py'],
+    pathex=['src'],
     binaries=[],
     datas=[],
     hiddenimports=['rumps', 'objc', 'Foundation', 'AppKit'],
@@ -13,8 +12,6 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
     cipher=block_cipher,
     noarchive=False,
 )
@@ -26,16 +23,12 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='ClaudeTracker',
+    name='ClaudeTrackerSpark',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
     console=False,
-    disable_windowed_traceback=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
 )
 
 coll = COLLECT(
@@ -46,20 +39,19 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='ClaudeTracker',
+    name='ClaudeTrackerSpark',
 )
 
 app = BUNDLE(
     coll,
-    name='ClaudeTracker.app',
+    name='ClaudeTrackerSpark.app',
     icon=None,
-    bundle_identifier='com.claudetracker.app',
+    bundle_identifier='com.claudetracker.spark',
     info_plist={
-        'LSUIElement': True,          # hides Dock icon — menu bar only
-        'CFBundleName': 'ClaudeTracker',
-        'CFBundleDisplayName': 'Claude Tracker',
+        'LSUIElement': True,
+        'CFBundleName': 'ClaudeTrackerSpark',
+        'CFBundleDisplayName': 'Claude Tracker — Spark',
         'CFBundleVersion': '1.0.0',
         'CFBundleShortVersionString': '1.0.0',
-        'NSHumanReadableCopyright': 'MIT',
     },
 )
