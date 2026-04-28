@@ -47,15 +47,16 @@ open /Applications/ClaudePulse.app
 
 ## First-time Setup
 
-Claude Pulse authenticates using your browser session cookie. You only need to do this once.
+Claude Pulse authenticates using the full cookie string from your browser session. You only need to do this once.
 
 1. Open [claude.ai](https://claude.ai) in your browser and log in
-2. Open **DevTools** (`Cmd + Option + I`) → **Application** tab → **Cookies** → `https://claude.ai`
-3. Find the cookie named `sessionKey` and copy its value
-4. Click the `⏱` icon in your menu bar → **Setup**
-5. Paste the cookie value into the **Session Cookie** field
-6. Org ID is optional — the app resolves it automatically if left empty
-7. Click **Save**
+2. Open **DevTools** (`Cmd + Option + I`) → **Network** tab
+3. Reload the page, then click any request to `claude.ai`
+4. In **Request Headers** find the `Cookie:` field — copy the entire value (long string starting with `sessionKey=sk-ant-…`)
+5. Click the `⏱` icon in your menu bar → **Cookie**
+6. Paste the full cookie string → click **Next →**
+7. Paste your **Org ID** from the request URL (`/api/organizations/[THIS-ID]/usage`), or leave empty — the app resolves it automatically
+8. Click **Save**
 
 The app will immediately fetch your current usage data.
 
