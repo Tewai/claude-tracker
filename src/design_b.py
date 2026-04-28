@@ -18,6 +18,7 @@ def _on_main(fn):
     NSOperationQueue.mainQueue().addOperationWithBlock_(fn)
 
 COOKIE_FILE = os.path.expanduser("~/.claude_tracker_cookie.txt")
+ORG_FILE    = os.path.expanduser("~/.claude_tracker_org.txt")
 REFRESH_SEC = 300
 
 
@@ -38,6 +39,7 @@ class AuraApp(rumps.App):
     def __init__(self):
         super().__init__("⚡–% · 📅–%", quit_button=None)
         self._cookie = self._load_cookie()
+        self._org_id = self._load_org()
 
         # ── display rows ────────────────────────────────────────────────────
         self._s_title  = rumps.MenuItem("⏱  Session (5 h window)", callback=None)
@@ -92,31 +94,55 @@ class AuraApp(rumps.App):
             return open(COOKIE_FILE).read().strip()
         return ""
 
-    def _save_cookie(self, c: str):
+    def _load_org(self) -> str:
+        if os.path.exists(ORG_FILE):
+            return open(ORG_FILE).read().strip()
+        return ""
+
+    def _save_cookie(self, c: str, org: str):
         with open(COOKIE_FILE, "w") as f:
             f.write(c)
+        with open(ORG_FILE, "w") as f:
+            f.write(org)
         self._cookie = c
+        self._org_id = org
 
     def set_cookie(self, _):
-        w = rumps.Window(
-            title="⚙ Set Session Cookie",
+        w_cookie = rumps.Window(
+            title="⚙ Krok 1 — Cookie",
             message=(
-                "Paste your claude.ai cookie string.\n\n"
-                "How to get it:\n"
-                "  1. Open claude.ai in your browser\n"
-                "  2. Open DevTools (⌥⌘I) → Network tab\n"
-                "  3. Reload the page, click any request to claude.ai\n"
-                "  4. Request Headers → copy the Cookie: value"
+                "Vlož celý Cookie řetězec ze záhlaví requestu:\n"
+                "(DevTools → Síť → klikni na request → Záhlaví → Cookie:)"
             ),
             default_text=self._cookie,
-            ok="💾 Save",
-            cancel="Cancel",
+            ok="Další →",
+            cancel="Zrušit",
             dimensions=(500, 80),
         )
-        resp = w.run()
-        if resp.clicked and resp.text.strip():
-            self._save_cookie(resp.text.strip())
-            self._fetch()
+        r1 = w_cookie.run()
+        if not r1.clicked or not r1.text.strip():
+            return
+
+        w_org = rumps.Window(
+            title="⚙ Krok 2 — Organisation ID",
+            message=(
+                "Vlož Organisation ID.\n\n"
+                "Kde ho najdeš:\n"
+                "  DevTools → Síť → klikni na request 'bootstrap'\n"
+                "  → v URL uvidíš: /bootstrap/TOTO-JE-ID/app_start\n\n"
+                "  Nebo z URL: claude.ai/api/organizations/ID-ZDE/usage"
+            ),
+            default_text=self._org_id,
+            ok="💾 Uložit",
+            cancel="Zrušit",
+            dimensions=(400, 36),
+        )
+        r2 = w_org.run()
+        if not r2.clicked:
+            return
+
+        self._save_cookie(r1.text.strip(), r2.text.strip())
+        self._fetch()
 
     # ── fetch ────────────────────────────────────────────────────────────────
 
@@ -127,7 +153,7 @@ class AuraApp(rumps.App):
 
     def _fetch_bg(self):
         try:
-            data = fetch_usage(self._cookie)
+            data = fetch_usage(self._cookie, self._org_id or None)
             _on_main(lambda: self._update(data))
         except Exception as e:
             msg = str(e)
