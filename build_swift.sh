@@ -22,6 +22,9 @@ xcrun swiftc -O \
     "$SRC" \
     -o "$APP/Contents/MacOS/$NAME"
 
+echo "🖼  Copying icon…"
+cp "src/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+
 echo "📋 Writing Info.plist…"
 cat > "$APP/Contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -38,6 +41,7 @@ cat > "$APP/Contents/Info.plist" << PLIST
     <key>CFBundlePackageType</key>    <string>APPL</string>
     <key>LSMinimumSystemVersion</key> <string>14.0</string>
     <key>LSUIElement</key>            <true/>
+    <key>CFBundleIconFile</key>         <string>AppIcon</string>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSAppTransportSecurity</key>
     <dict>
