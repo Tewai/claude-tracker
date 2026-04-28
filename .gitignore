@@ -7,3 +7,4 @@ __pycache__/
 CLAUDE.md
 WORKFLOW_GUIDE.md
 make_icon.py
+dist/.metadata_never_index
