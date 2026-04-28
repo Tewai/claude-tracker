@@ -13,7 +13,7 @@ Connects to the Claude.ai API and displays your session and weekly usage limits 
   - **Sonnet** — separate Claude 3.5 Sonnet tracking (if available on your plan)
 - Each metric shows percentage, visual progress bar, and countdown to reset
 - Auto-refresh every 5 minutes + manual Refresh button
-- Setup dialog for session cookie and org ID (stored securely in UserDefaults)
+- Setup dialog for session cookie and org ID (stored locally in UserDefaults)
 
 ## Requirements
 
@@ -53,7 +53,7 @@ Claude Pulse authenticates using the full cookie string from your browser sessio
 2. Open **DevTools** (`Cmd + Option + I`) → **Network** tab
 3. Reload the page, then click any request to `claude.ai`
 4. In **Request Headers** find the `Cookie:` field — copy the entire value (long string starting with `sessionKey=sk-ant-…`)
-5. Click the `⏱` icon in your menu bar → **Cookie**
+5. Click the `⏱` icon in your menu bar to open the panel → click the **Cookie** button in the footer
 6. Paste the full cookie string → click **Next →**
 7. Paste your **Org ID** from the request URL (`/api/organizations/[THIS-ID]/usage`), or leave empty — the app resolves it automatically
 8. Click **Save**
