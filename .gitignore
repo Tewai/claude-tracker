@@ -5,3 +5,4 @@ __pycache__/
 *.spec.bak
 .DS_Store
 CLAUDE.md
+WORKFLOW_GUIDE.md
