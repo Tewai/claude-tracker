@@ -4,7 +4,7 @@ cd "$(dirname "$0")"
 
 NAME="ClaudePulse"
 BUNDLE_ID="com.claudepulse.app"
-VERSION="1.0.0"
+VERSION="1.1.0"
 SRC="src/swift/${NAME}.swift"
 APP="dist/${NAME}.app"
 

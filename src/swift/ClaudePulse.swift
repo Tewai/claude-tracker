@@ -36,11 +36,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             btn.target = self
         }
 
+        let panelSize = NSSize(width: 384, height: 490)
         let hosting = NSHostingView(rootView: PulseView(manager: manager))
-        hosting.frame = NSRect(x: 0, y: 0, width: 384, height: 340)
+        hosting.frame = NSRect(origin: .zero, size: panelSize)
 
         panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 384, height: 340),
+            contentRect: NSRect(origin: .zero, size: panelSize),
             styleMask: [.nonactivatingPanel, .borderless, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -96,7 +97,11 @@ class UsageManager: ObservableObject {
     @Published var session   = Metric()
     @Published var weekly    = Metric()
     @Published var sonnet    = Metric()
+    @Published var fable     = Metric()
+    @Published var design    = Metric()
     @Published var hasSonnet = false
+    @Published var hasFable  = false
+    @Published var hasDesign = false
     @Published var loading   = false
     @Published var error: String? = nil
     @Published var updatedAt: Date? = nil
@@ -129,7 +134,9 @@ class UsageManager: ObservableObject {
             let oid = orgId.isEmpty ? try await resolveOrgId() : orgId
             let r   = try await loadUsage(orgId: oid)
             session = r.session; weekly = r.weekly; sonnet = r.sonnet
-            hasSonnet = r.hasSonnet; updatedAt = Date(); loading = false
+            fable = r.fable; design = r.design
+            hasSonnet = r.hasSonnet; hasFable = r.hasFable; hasDesign = r.hasDesign
+            updatedAt = Date(); loading = false
             pushTitle()
         } catch {
             self.error = error.localizedDescription; loading = false
@@ -137,10 +144,11 @@ class UsageManager: ObservableObject {
     }
 
     private func pushTitle() {
-        onTitleUpdate?(makeMenuTitle(sPct: session.pct, wPct: weekly.pct))
+        onTitleUpdate?(makeMenuTitle(sPct: session.pct, wPct: weekly.pct,
+                                     fPct: hasFable ? fable.pct : nil))
     }
 
-    private func makeMenuTitle(sPct: Int, wPct: Int) -> NSAttributedString {
+    private func makeMenuTitle(sPct: Int, wPct: Int, fPct: Int?) -> NSAttributedString {
         let textAttrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .medium)
         ]
@@ -165,6 +173,16 @@ class UsageManager: ObservableObject {
         s.append(NSAttributedString(string: " \(sPct)%  ", attributes: textAttrs))
         s.append(attach(calImg, w: 16))
         s.append(NSAttributedString(string: " \(wPct)%", attributes: textAttrs))
+
+        // Fable — book symbol (template = adapts to menu bar appearance)
+        if let f = fPct {
+            let bookCfg = NSImage.SymbolConfiguration(pointSize: 12, weight: .semibold)
+            let bookImg = NSImage(systemSymbolName: "book.closed.fill", accessibilityDescription: nil)?
+                .withSymbolConfiguration(bookCfg)
+            s.append(NSAttributedString(string: "  ", attributes: textAttrs))
+            s.append(attach(bookImg, w: 13))
+            s.append(NSAttributedString(string: " \(f)%", attributes: textAttrs))
+        }
         return s
     }
 
@@ -227,7 +245,10 @@ class UsageManager: ObservableObject {
         return o
     }
 
-    struct ParsedUsage { var session, weekly, sonnet: Metric; var hasSonnet: Bool }
+    struct ParsedUsage {
+        var session, weekly, sonnet, fable, design: Metric
+        var hasSonnet, hasFable, hasDesign: Bool
+    }
 
     private func loadUsage(orgId: String) async throws -> ParsedUsage {
         let url = URL(string: "https://claude.ai/api/organizations/\(orgId)/usage")!
@@ -246,11 +267,25 @@ class UsageManager: ObservableObject {
             return Metric(pct: pct, resetsAt: date)
         }
 
+        // Přesné názvy klíčů pro Fable / Claude Design nejsou potvrzené —
+        // zkusí se první existující z kandidátů (ověřit v DevTools po obnově cookie)
+        func parseFirst(_ keys: [String]) -> Metric? {
+            for k in keys { if let m = parse(k) { return m } }
+            return nil
+        }
+
+        let fable  = parseFirst(["seven_day_fable", "fable"])
+        let design = parseFirst(["seven_day_design", "seven_day_claude_design", "design", "claude_design"])
+
         return ParsedUsage(
             session: parse("five_hour") ?? Metric(),
             weekly:  parse("seven_day") ?? Metric(),
             sonnet:  parse("seven_day_sonnet") ?? Metric(),
-            hasSonnet: j["seven_day_sonnet"] is [String: Any]
+            fable:   fable  ?? Metric(),
+            design:  design ?? Metric(),
+            hasSonnet: j["seven_day_sonnet"] is [String: Any],
+            hasFable:  fable  != nil,
+            hasDesign: design != nil
         )
     }
 }
@@ -330,6 +365,10 @@ struct PulseView: View {
             MetricRow(label: "Weekly",  metric: manager.weekly,                         icon: "calendar")
             Divider().overlay(Color.white.opacity(0.04)).padding(.horizontal, 18)
             MetricRow(label: "Sonnet",  metric: manager.hasSonnet ? manager.sonnet : nil, icon: "sparkles")
+            Divider().overlay(Color.white.opacity(0.04)).padding(.horizontal, 18)
+            MetricRow(label: "Fable",   metric: manager.hasFable ? manager.fable : nil,   icon: "book.closed.fill")
+            Divider().overlay(Color.white.opacity(0.04)).padding(.horizontal, 18)
+            MetricRow(label: "Claude Design", metric: manager.hasDesign ? manager.design : nil, icon: "paintbrush.fill")
             if let err = manager.error {
                 HStack(spacing: 6) {
                     Image(systemName: "exclamationmark.triangle.fill")
