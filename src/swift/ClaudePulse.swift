@@ -36,9 +36,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             btn.target = self
         }
 
-        let panelSize = NSSize(width: 384, height: 490)
+        let panelSize = NSSize(width: 384, height: 340)
         let hosting = NSHostingView(rootView: PulseView(manager: manager))
         hosting.frame = NSRect(origin: .zero, size: panelSize)
+        hosting.autoresizingMask = [.width, .height]
 
         panel = NSPanel(
             contentRect: NSRect(origin: .zero, size: panelSize),
@@ -64,9 +65,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panel.isVisible ? hidePanel() : showPanel()
     }
 
+    // Výška podle počtu řádků (2 pevné + dynamické scoped limity)
+    func panelHeight() -> CGFloat {
+        let rows = 2 + manager.scoped.count
+        var h = CGFloat(100 + rows * 78)
+        if manager.error != nil { h += 30 }
+        return h
+    }
+
     func showPanel() {
         guard let btn = statusItem.button,
               let btnWindow = btn.window else { return }
+
+        panel.setContentSize(NSSize(width: 384, height: panelHeight()))
 
         let btnRect = btnWindow.convertToScreen(btn.convert(btn.bounds, to: nil))
         let x = btnRect.midX - panel.frame.width / 2
@@ -93,15 +104,17 @@ struct Metric {
     var resetsAt: Date? = nil
 }
 
+// Limit vázaný na model/surface (Fable, Claude Design, Sonnet, …) z pole `limits`
+struct ScopedLimit: Identifiable {
+    var id: String { label }
+    var label: String
+    var metric: Metric
+}
+
 class UsageManager: ObservableObject {
     @Published var session   = Metric()
     @Published var weekly    = Metric()
-    @Published var sonnet    = Metric()
-    @Published var fable     = Metric()
-    @Published var design    = Metric()
-    @Published var hasSonnet = false
-    @Published var hasFable  = false
-    @Published var hasDesign = false
+    @Published var scoped: [ScopedLimit] = []
     @Published var loading   = false
     @Published var error: String? = nil
     @Published var updatedAt: Date? = nil
@@ -133,9 +146,7 @@ class UsageManager: ObservableObject {
         do {
             let oid = orgId.isEmpty ? try await resolveOrgId() : orgId
             let r   = try await loadUsage(orgId: oid)
-            session = r.session; weekly = r.weekly; sonnet = r.sonnet
-            fable = r.fable; design = r.design
-            hasSonnet = r.hasSonnet; hasFable = r.hasFable; hasDesign = r.hasDesign
+            session = r.session; weekly = r.weekly; scoped = r.scoped
             updatedAt = Date(); loading = false
             pushTitle()
         } catch {
@@ -144,8 +155,9 @@ class UsageManager: ObservableObject {
     }
 
     private func pushTitle() {
+        let fable = scoped.first { $0.label.lowercased().contains("fable") }
         onTitleUpdate?(makeMenuTitle(sPct: session.pct, wPct: weekly.pct,
-                                     fPct: hasFable ? fable.pct : nil))
+                                     fPct: fable?.metric.pct))
     }
 
     private func makeMenuTitle(sPct: Int, wPct: Int, fPct: Int?) -> NSAttributedString {
@@ -246,8 +258,8 @@ class UsageManager: ObservableObject {
     }
 
     struct ParsedUsage {
-        var session, weekly, sonnet, fable, design: Metric
-        var hasSonnet, hasFable, hasDesign: Bool
+        var session, weekly: Metric
+        var scoped: [ScopedLimit]
     }
 
     private func loadUsage(orgId: String) async throws -> ParsedUsage {
@@ -256,36 +268,54 @@ class UsageManager: ObservableObject {
         if let h = resp as? HTTPURLResponse, h.statusCode != 200 { throw AppError.httpError(h.statusCode) }
         guard let j = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw AppError.badJSON }
 
+        func parseDate(_ s: String?) -> Date? {
+            guard let s = s else { return nil }
+            let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            return f.date(from: s) ?? ISO8601DateFormatter().date(from: s)
+        }
+
+        // Starý formát: top-level buckety s `utilization`
         func parse(_ key: String) -> Metric? {
             guard let b = j[key] as? [String: Any] else { return nil }
-            let pct = Int((b["utilization"] as? Double) ?? 0)
-            var date: Date? = nil
-            if let s = b["resets_at"] as? String {
-                let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-                date = f.date(from: s) ?? ISO8601DateFormatter().date(from: s)
+            return Metric(pct: (b["utilization"] as? NSNumber)?.intValue ?? 0,
+                          resetsAt: parseDate(b["resets_at"] as? String))
+        }
+
+        // Nový formát: pole `limits` — session, weekly_all a libovolné weekly_scoped
+        // limity vázané na model/surface (Fable, Claude Design, Sonnet, …)
+        var session: Metric? = nil
+        var weekly:  Metric? = nil
+        var scoped:  [ScopedLimit] = []
+
+        if let limits = j["limits"] as? [[String: Any]] {
+            for l in limits {
+                let m = Metric(pct: (l["percent"] as? NSNumber)?.intValue ?? 0,
+                               resetsAt: parseDate(l["resets_at"] as? String))
+                switch l["kind"] as? String {
+                case "session":    session = m
+                case "weekly_all": weekly  = m
+                case "weekly_scoped":
+                    let scope   = l["scope"]   as? [String: Any]
+                    let model   = scope?["model"]   as? [String: Any]
+                    let surface = scope?["surface"] as? [String: Any]
+                    let label = (model?["display_name"] as? String)
+                             ?? (surface?["display_name"] as? String)
+                             ?? "Scoped"
+                    scoped.append(ScopedLimit(label: label, metric: m))
+                default: break
+                }
             }
-            return Metric(pct: pct, resetsAt: date)
         }
 
-        // Přesné názvy klíčů pro Fable / Claude Design nejsou potvrzené —
-        // zkusí se první existující z kandidátů (ověřit v DevTools po obnově cookie)
-        func parseFirst(_ keys: [String]) -> Metric? {
-            for k in keys { if let m = parse(k) { return m } }
-            return nil
+        // Fallback na staré klíče, kdyby `limits` chybělo
+        if scoped.isEmpty, let sonnet = parse("seven_day_sonnet") {
+            scoped.append(ScopedLimit(label: "Sonnet", metric: sonnet))
         }
-
-        let fable  = parseFirst(["seven_day_fable", "fable"])
-        let design = parseFirst(["seven_day_design", "seven_day_claude_design", "design", "claude_design"])
 
         return ParsedUsage(
-            session: parse("five_hour") ?? Metric(),
-            weekly:  parse("seven_day") ?? Metric(),
-            sonnet:  parse("seven_day_sonnet") ?? Metric(),
-            fable:   fable  ?? Metric(),
-            design:  design ?? Metric(),
-            hasSonnet: j["seven_day_sonnet"] is [String: Any],
-            hasFable:  fable  != nil,
-            hasDesign: design != nil
+            session: session ?? parse("five_hour") ?? Metric(),
+            weekly:  weekly  ?? parse("seven_day") ?? Metric(),
+            scoped:  scoped
         )
     }
 }
@@ -358,17 +388,24 @@ struct PulseView: View {
         .background(Color.white.opacity(0.02))
     }
 
+    func icon(for label: String) -> String {
+        let l = label.lowercased()
+        if l.contains("fable")  { return "book.closed.fill" }
+        if l.contains("design") { return "paintbrush.fill" }
+        if l.contains("sonnet") { return "sparkles" }
+        if l.contains("opus")   { return "crown.fill" }
+        return "gauge"
+    }
+
     var metricsView: some View {
         VStack(spacing: 0) {
-            MetricRow(label: "Session", metric: manager.session,                        icon: "clock.fill")
+            MetricRow(label: "Session", metric: manager.session, icon: "clock.fill")
             Divider().overlay(Color.white.opacity(0.04)).padding(.horizontal, 18)
-            MetricRow(label: "Weekly",  metric: manager.weekly,                         icon: "calendar")
-            Divider().overlay(Color.white.opacity(0.04)).padding(.horizontal, 18)
-            MetricRow(label: "Sonnet",  metric: manager.hasSonnet ? manager.sonnet : nil, icon: "sparkles")
-            Divider().overlay(Color.white.opacity(0.04)).padding(.horizontal, 18)
-            MetricRow(label: "Fable",   metric: manager.hasFable ? manager.fable : nil,   icon: "book.closed.fill")
-            Divider().overlay(Color.white.opacity(0.04)).padding(.horizontal, 18)
-            MetricRow(label: "Claude Design", metric: manager.hasDesign ? manager.design : nil, icon: "paintbrush.fill")
+            MetricRow(label: "Weekly",  metric: manager.weekly,  icon: "calendar")
+            ForEach(manager.scoped) { s in
+                Divider().overlay(Color.white.opacity(0.04)).padding(.horizontal, 18)
+                MetricRow(label: s.label, metric: s.metric, icon: icon(for: s.label))
+            }
             if let err = manager.error {
                 HStack(spacing: 6) {
                     Image(systemName: "exclamationmark.triangle.fill")

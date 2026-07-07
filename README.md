@@ -7,12 +7,10 @@ Connects to the Claude.ai API and displays your session and weekly usage limits 
 
 - **Menu bar display:** `⏱ 15% 📅 80% 📕 48%` — session, weekly, and Fable usage at a glance (Fable shows only if available on your plan)
 - **Color-coded status:** green (0–69 %) / orange (70–89 %) / red (90–100 %)
-- **Detailed popup panel** with five metrics:
+- **Detailed popup panel** with dynamic metrics:
   - **Session** — 5-hour rolling usage window
   - **Weekly** — 7-day rolling usage window
-  - **Sonnet** — separate Sonnet tracking (if available on your plan)
-  - **Fable** — separate Claude Fable 5 tracking (if available on your plan)
-  - **Claude Design** — separate Claude Design tracking (if available on your plan)
+  - **Model/surface limits** — one row per scoped limit reported by the API (e.g. **Fable**, **Claude Design**, **Sonnet**); rows appear automatically as Anthropic adds new limits
 - Each metric shows percentage, visual progress bar, and countdown to reset
 - Auto-refresh every 5 minutes + manual Refresh button
 - Setup dialog for session cookie and org ID (stored locally in UserDefaults)
